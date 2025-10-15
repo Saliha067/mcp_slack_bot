@@ -8,7 +8,14 @@ Call MCP server from Slack bot using LLMs to respond to messages and execute too
 
 ## Setup
 
-Install Dependencies
+### Create a Slack App
+
+1. Go to [api.slack.com/apps](https://api.slack.com/apps) & click "Create New App"
+2. Create the app and install it to your workspace
+3. Take note of both :
+   - Bot Token (`xoxb-...`)
+   - App Token (`xapp-...`)
+
 # Create a virtual environment
 
 ```python -m venv venv```
