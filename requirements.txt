@@ -1,0 +1,9 @@
+slack_bolt>=1.18.0
+slack_sdk>=3.21.0
+python-dotenv>=1.0.0
+mcp>=1.0.0
+httpx>=0.24.1
+langchain-core>=0.1.0
+langchain-openai>=0.0.5
+langchain-community>=0.0.10
+langchain-ollama>=0.0.1
