@@ -10,27 +10,32 @@ Call MCP server from Slack bot using LLMs to respond to messages and execute too
 
 Install Dependencies
 # Create a virtual environment
-python -m venv venv
+
+```python -m venv venv```
 
 # Activate the virtual environment
-source venv/bin/activate  
+
+```source venv/bin/activate```
 
 # Install project dependencies
-pip install -r requirements.txt
+
+```pip install -r requirements.txt```
 
 # Configure Environment Variables
 
 create a .env file in the project root with your Slack and LLM API credentials
 
+```
 SLACK_BOT_TOKEN=xoxb-
 SLACK_APP_TOKEN=xapp-
 OPENAI_API_KEY=<<your-openai-key>>
 # if LLM_MODEL is not gpt or gpt-xxxxx then it will use local ollama model
 LLM_MODEL=llama3.2
+```
 
 # Run the bot directly
-python main.py
 
+```python main.py```
 
 The bot will Connect to all configured MCP servers in servers_config.json , Discover available tools , Start the Slack app in Socket Mode and Listen for mentions and direct messages
 
