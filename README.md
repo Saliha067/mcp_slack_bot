@@ -6,11 +6,6 @@ Call MCP server from Slack bot using LLMs to respond to messages and execute too
 
 ![demo](/attachments/output.gif)
 
-- **AI-Powered Assistant**: Responds to messages in channels and DMs using LLM capabilities
-- **MCP Integration**: Full access to MCP tools like SQLite database and web fetching
-- **Multi-LLM Support**: Works with OpenAI, Groq, and Anthropic models
-- **App Home Tab**: Shows available tools and usage information
-
 ## Setup
 
 Install Dependencies
@@ -23,7 +18,7 @@ source venv/bin/activate
 # Install project dependencies
 pip install -r requirements.txt
 
-3. Configure Environment Variables
+# Configure Environment Variables
 
 create a .env file in the project root with your Slack and LLM API credentials
 
