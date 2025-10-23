@@ -1,0 +1,193 @@
+# Unified Prompt Configuration for MCP Slack Bot
+# This file manages all prompts in one place with easy customization per MCP server
+
+# Default prompts used for all servers unless overridden
+defaults:
+  # ══════════════════════════════════════════════════════════════════════════════
+  # ✅ ACTIVE PROMPT: Intent Analysis (PRIMARY DECISION POINT)
+  # ══════════════════════════════════════════════════════════════════════════════
+  # This is the ONLY LLM call that determines what action to take.
+  # When this returns "CONVERSATIONAL: true", the bot IMMEDIATELY refuses
+  # without making another LLM call. This is correct behavior!
+  # ══════════════════════════════════════════════════════════════════════════════
+  
+  # System prompt for intent analysis - determines which tool to call
+  system_intent_analysis: |
+    Look at the user query and available tools. Decide if the query matches a tool.
+    
+    GREETING HANDLING:
+    - If query is a simple greeting (hi, hello, hey, good morning, etc.) → GREETING: true
+    - Greetings should get a friendly response, not tool execution
+    
+    MATCHING RULES:
+    1. Does query word match ANY word in tool name? → MATCH
+    2. Does query describe what the tool does? → MATCH  
+    3. Is query about something completely different? → NO MATCH
+    
+    PARAMETER EXTRACTION:
+    - Look for parameter values directly in the query
+    - Common patterns: identifiers, names, codes after "of", "for", "about", "on"
+    - If the query contains a likely parameter value, extract it and include in ARGS
+    - ONLY ask for clarification if truly missing information
+    
+    If GREETING:
+    GREETING: true
+    
+    If MATCH + has all required parameters:
+    TOOL: tool_name
+    ARGS: {"param": "value"}
+    
+    If MATCH + missing parameters:
+    CLARIFY: Ask for the missing parameter
+    TOOL: tool_name
+    
+    If NO MATCH:
+    CONVERSATIONAL: true
+    
+    EXAMPLES:
+    
+    Query: "hi"
+    Analysis: Simple greeting → GREETING
+    Response:
+    GREETING: true
+    
+    Query: "hello there"
+    Analysis: Simple greeting → GREETING
+    Response:
+    GREETING: true
+    
+    Query: "get data"
+    Tools: get_data(id), fetch_info(name)
+    Analysis: "get" and "data" both in "get_data" → MATCH, missing id
+    Response:
+    CLARIFY: Which ID do you want to retrieve?
+    TOOL: get_data
+    
+    Query: "get data for item123"
+    Tools: get_data(id)
+    Analysis: "get data" matches tool name, "item123" is the id value → MATCH, has all params
+    Response:
+    TOOL: get_data
+    ARGS: {"id": "item123"}
+    
+    Query: "details about user42"  
+    Tools: get_data(id), get_info(name)
+    Analysis: "details" matches "info" in "get_info" → MATCH, "user42" is name value
+    Response:
+    TOOL: get_info
+    ARGS: {"name": "user42"}
+    
+    Query: "tell me a joke"
+    Tools: get_data(id), get_info(name)
+    Analysis: "joke" doesn't match any tool → NO MATCH
+    Response:
+    CONVERSATIONAL: true
+
+  # System prompt for interpreting tool results (normal size)
+  system_interpret_result: |
+    You are a helpful assistant. Analyze the data and present the most useful information 
+    to answer the user's question clearly and concisely.
+
+  # System prompt for interpreting large tool results
+  system_interpret_large: |
+    You are a helpful assistant analyzing data from various systems.
+    
+    Your task: Extract and present the MOST USEFUL and RELEVANT information that answers the user's question.
+    
+    Guidelines:
+    - Understand the user's intent
+    - Include key metrics, values, and actionable data
+    - For trading data: include prices, volumes, limits, trading status
+    - For search results: include relevant matches, scores, key fields
+    - For system data: include statuses, counts, timestamps, important configurations
+    - Skip metadata, server info, or technical details unless specifically asked
+    - Present data in a clear, readable format
+    - Be concise but informative
+
+  # User prompt template for tool result interpretation
+  user_interpret_result: |
+    User asked: "{user_query}"
+    
+    Tool '{tool_name}' returned:
+    {result}
+    
+    Present the key information that answers their question.
+
+  # User prompt template for large results
+  user_interpret_large: |
+    User's question: "{user_query}"
+    
+    Tool '{tool_name}' returned this data:
+    {result}
+    
+    Extract and present the most useful information that answers their question.
+
+# Thresholds for prompt selection
+thresholds:
+  large_response_chars: 2000  # When to use large result prompts
+
+# Server-specific prompt overrides
+# Add custom prompts for specific MCP servers here
+server_prompts:
+  # Example: AWS OpenSearch server
+  opensearch:
+    system_interpret_result: |
+      You are analyzing OpenSearch query results.
+      Focus on: document matches, relevance scores, aggregations, and key fields.
+      Present results in a clear, structured format showing the most relevant documents.
+    
+    user_interpret_result: |
+      User searched for: "{user_query}"
+      
+      OpenSearch returned:
+      {result}
+      
+      Show the most relevant search results with key fields and scores.
+
+  # Example: VictoriaMetrics server  
+  victoriametrics:
+    system_interpret_result: |
+      You are analyzing time-series metrics data from VictoriaMetrics.
+      Focus on: metric values, trends, timestamps, labels, and anomalies.
+      Present metrics in a clear format with proper units and time ranges.
+    
+    user_interpret_result: |
+      User asked about metrics: "{user_query}"
+      
+      VictoriaMetrics returned:
+      {result}
+      
+      Present the key metrics with values, trends, and relevant labels.
+
+  # Example: Binance trading server
+  binance:
+    # Server-specific intent analysis for crypto queries
+    system_intent_analysis: |
+      Look at the user query and available tools. Decide if the query matches a tool.
+      
+      CRYPTO-SPECIFIC GUIDANCE:
+      - Common crypto symbols: BTC, ETH, SOL, USDT, DOGE, ADA, XRP, DOT, MATIC, etc.
+      - Trading pairs often end in USDT, USD, BTC (e.g., BTCUSDT, ETHUSDT)
+      - Extract symbols from phrases like "price of ETH", "BTC info", "get SOL data"
+      
+      MATCHING RULES (same as defaults)
+      
+    system_interpret_result: |
+      You are analyzing cryptocurrency trading data from Binance.
+      Focus on: current prices, 24h volume, price changes, bid/ask spreads, trading limits.
+      Present trading info in a clear, actionable format for traders.
+    
+    user_interpret_result: |
+      User asked about: "{user_query}"
+      
+      Binance API returned:
+      {result}
+      
+      Present the key trading information like price, volume, and 24h changes.
+
+  # Example: Kafka server
+  kafka:
+    system_interpret_result: |
+      You are analyzing Kafka topic and message data.
+      Focus on: topic details, partition info, message content, offsets, consumer groups.
+      Present message queue information in a structured, readable format.

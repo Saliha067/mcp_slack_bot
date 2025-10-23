@@ -3,6 +3,14 @@
     "time": {
       "command": "docker",
       "args": ["run", "-i", "--rm", "-e", "LOCAL_TIMEZONE", "mcp/time"]
+    },
+    "my_binance_mcp": {
+      "url": "http://localhost:8000/mcp"
+    },
+    "memory": {
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-memory"]
     }
-  }
+  },
+  "allowedTools": ["get_symbol_info"]
 }
