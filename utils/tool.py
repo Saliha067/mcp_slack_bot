@@ -2,12 +2,13 @@ from typing import Dict, Optional
 
 
 class Tool:
-    def __init__(self, name: str, description: str, input_schema: Dict, config, is_allowed: Optional[bool] = None):
+    def __init__(self, name: str, description: str, input_schema: Dict, config, is_allowed: Optional[bool] = None, server_name: Optional[str] = None):
         self.name = name
         self.description = description
         self.input_schema = input_schema
         self.config = config
         self._is_allowed = is_allowed
+        self.server_name = server_name
     
     @property
     def is_allowed(self) -> bool:

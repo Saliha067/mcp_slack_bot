@@ -83,9 +83,9 @@ class Server:
             
             allowed_tools_list = getattr(self, 'allowed_tools', [])
             
-            logging.info(f"Server {self.name} returned {len(response.tools)} total tools")
+            logging.debug(f"Server {self.name} returned {len(response.tools)} total tools")
             if allowed_tools_list:
-                logging.info(f"Filtering to allowed tools: {allowed_tools_list}")
+                logging.debug(f"Filtering to allowed tools: {allowed_tools_list}")
             
             for tool_def in response.tools:
                 allowed = not allowed_tools_list or tool_def.name in allowed_tools_list
@@ -98,7 +98,8 @@ class Server:
                     description=tool_def.description or "",
                     input_schema=tool_def.inputSchema or {},
                     config=self.app_config,
-                    is_allowed=allowed
+                    is_allowed=allowed,
+                    server_name=self.name
                 )
                 tools.append(tool)
             
@@ -106,7 +107,7 @@ class Server:
             blocked_count = len(tools) - allowed_count
             
             self.tools_cache = tools
-            logging.info(f"Loaded {allowed_count} allowed tools, blocked {blocked_count} tools from {self.name}")
+            logging.debug(f"Loaded {allowed_count} allowed tools, blocked {blocked_count} tools from {self.name}")
             return tools
         except Exception as e:
             logging.error(f"Error getting tools from {self.name}: {e}")

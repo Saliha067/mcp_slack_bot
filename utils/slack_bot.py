@@ -82,7 +82,15 @@ class SlackBot:
         thread = event.get("thread_ts", event.get("ts"))
         conversation_key = f"{channel}:{user}"
         
-        print(f"\n📩 Message from {user}: {text}")
+        # Get channel name for better logging
+        try:
+            channel_info = await self.client.conversations_info(channel=channel)
+            channel_name = channel_info.get("channel", {}).get("name", channel)
+        except:
+            # Fallback to channel ID if we can't get the name (e.g., DM)
+            channel_name = "DM" if event.get("channel_type") == "im" else channel
+        
+        print(f"\n📩 Message from {user} in #{channel_name}: {text}")
         
         try:
             if conversation_key not in self.conversations:
@@ -174,9 +182,41 @@ Return valid JSON only, no other text."""
         response = await self.chat_bot.get_response(messages)
         
         try:
-            data = json.loads(response)
+            # Extract JSON from response (LLM might add thinking tags or extra text)
+            # Find the first { and last } to get the complete JSON object
+            import re
+            
+            # Remove <think> tags if present
+            cleaned = re.sub(r'<think>.*?</think>', '', response, flags=re.DOTALL).strip()
+            
+            # Find JSON object
+            start = cleaned.find('{')
+            if start == -1:
+                logging.warning(f"No JSON object found in LLM response")
+                return None, None, None
+            
+            # Find matching closing brace
+            brace_count = 0
+            end = start
+            for i in range(start, len(cleaned)):
+                if cleaned[i] == '{':
+                    brace_count += 1
+                elif cleaned[i] == '}':
+                    brace_count -= 1
+                    if brace_count == 0:
+                        end = i + 1
+                        break
+            
+            if brace_count != 0:
+                logging.warning(f"Unmatched braces in JSON")
+                return None, None, None
+            
+            json_str = cleaned[start:end]
+            data = json.loads(json_str)
             return data.get("tool_name"), data.get("args"), data.get("clarification")
-        except:
+            
+        except Exception as e:
+            logging.warning(f"Failed to parse LLM response: {e}")
             return None, None, None
 
     async def _parse_clarification_response(self, response: str, tool_name: str) -> Tuple[Optional[str], Optional[Dict]]:
@@ -198,8 +238,36 @@ Return JSON with extracted parameters as dict, or empty dict if cannot parse."""
         result = await self.chat_bot.get_response(messages)
         
         try:
-            args = json.loads(result)
+            # Extract JSON from response (LLM might add thinking tags or extra text)
+            import re
+            
+            # Remove <think> tags if present
+            cleaned = re.sub(r'<think>.*?</think>', '', result, flags=re.DOTALL).strip()
+            
+            # Find JSON object
+            start = cleaned.find('{')
+            if start == -1:
+                return None, None
+            
+            # Find matching closing brace
+            brace_count = 0
+            end = start
+            for i in range(start, len(cleaned)):
+                if cleaned[i] == '{':
+                    brace_count += 1
+                elif cleaned[i] == '}':
+                    brace_count -= 1
+                    if brace_count == 0:
+                        end = i + 1
+                        break
+            
+            if brace_count != 0:
+                return None, None
+            
+            json_str = cleaned[start:end]
+            args = json.loads(json_str)
             return tool_name, args if args else None
+            
         except:
             return None, None
 
@@ -241,5 +309,47 @@ Return JSON with extracted parameters as dict, or empty dict if cannot parse."""
         if not self.tools:
             return "Hi! I'm ready to help, but no tools are available right now."
         
-        tool_list = "\n".join([f"• `{t.name}`: {t.description.split(chr(10))[0][:60]}" for t in self.tools[:5]])
-        return f"Hello! 👋 I can help with:\n\n{tool_list}"
+        # Group tools by server to show diverse capabilities
+        tools_by_server = {}
+        for tool in self.tools:
+            # Extract server name from tool or use a generic key
+            server_name = getattr(tool, 'server_name', 'default')
+            if server_name not in tools_by_server:
+                tools_by_server[server_name] = []
+            tools_by_server[server_name].append(tool)
+        
+        # Select tools: try to get at least one from each server
+        selected_tools = []
+        max_per_server = max(1, 5 // len(tools_by_server)) if len(tools_by_server) > 0 else 5
+        
+        for server_tools in tools_by_server.values():
+            selected_tools.extend(server_tools[:max_per_server])
+            if len(selected_tools) >= 5:
+                break
+        
+        # If still less than 5, fill up from remaining tools
+        if len(selected_tools) < 5:
+            for tool in self.tools:
+                if tool not in selected_tools:
+                    selected_tools.append(tool)
+                    if len(selected_tools) >= 5:
+                        break
+        
+        # Format tools with proper descriptions and server attribution
+        tool_lines = []
+        for t in selected_tools[:5]:
+            # Get first line of description and truncate nicely
+            desc = t.description.split('\n')[0].strip()
+            if len(desc) > 100:
+                desc = desc[:97] + "..."
+            server_badge = f" *[{t.server_name}]*" if hasattr(t, 'server_name') and t.server_name else ""
+            tool_lines.append(f"• `{t.name}`{server_badge}: {desc}")
+        
+        tool_list = "\n".join(tool_lines)
+        
+        # Add a summary line showing total capabilities
+        total_tools = len(self.tools)
+        servers_count = len(tools_by_server)
+        summary = f"\n\n_({total_tools} tools available from {servers_count} server(s))_"
+        
+        return f"Hello! 👋 I can help with:\n\n{tool_list}{summary}"
