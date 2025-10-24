@@ -1,16 +1,34 @@
 {
-  "mcpServers": {
-    "time": {
-      "command": "docker",
-      "args": ["run", "-i", "--rm", "-e", "LOCAL_TIMEZONE", "mcp/time"]
+  "servers": [
+    {
+      "name": "VictoriaMetrics",
+      "type": "http",
+      "url": "http://localhost:3000/mcp",
+      "allowedTools": [
+        "query",
+        "query_range",
+        "metrics",
+        "labels",
+        "label_values",
+        "series",
+        "documentation"
+      ]
     },
-    "my_binance_mcp": {
-      "url": "http://localhost:8000/mcp"
+    {
+      "name": "Binance",
+      "type": "http",
+      "url": "http://0.0.0.0:8000/mcp",
+      "allowedTools": [
+        "get_price",
+        "get_symbol_info"
+      ]
     },
-    "memory": {
+    {
+      "name": "LocalFilesystem",
+      "type": "stdio",
       "command": "npx",
-      "args": ["-y", "@modelcontextprotocol/server-memory"]
+      "args": ["-y", "@modelcontextprotocol/server-filesystem", "/tmp"],
+      "allowedTools": []
     }
-  },
-  "allowedTools": ["get_symbol_info"]
+  ]
 }

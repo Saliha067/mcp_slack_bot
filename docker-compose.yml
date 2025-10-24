@@ -1,0 +1,28 @@
+version: '3.8'
+
+services:
+  victoria-metrics:
+    image: victoriametrics/victoria-metrics:latest
+    ports:
+      - "8428:8428"
+    volumes:
+      - vm_data:/victoria-metrics-data
+    command:
+      - '--storageDataPath=/victoria-metrics-data'
+      - '--graphiteListenAddr=:2003'
+      - '--opentsdbListenAddr=:4242'
+      - '--httpListenAddr=:8428'
+
+  mcp-victoriametrics:
+    image: ghcr.io/victoriametrics-community/mcp-victoriametrics:latest
+    ports:
+      - "3000:3000"
+    environment:
+      - VM_INSTANCE_ENTRYPOINT=https://play.victoriametrics.com
+      - VM_INSTANCE_TYPE=single
+      - MCP_SERVER_MODE=http
+      - MCP_LISTEN_ADDR=:3000
+    # Removed depends_on since we're using external VM
+
+volumes:
+  vm_data:
