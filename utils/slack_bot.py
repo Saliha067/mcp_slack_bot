@@ -143,6 +143,8 @@ class SlackBot:
             
             if tool_name and args is not None:
                 result = await self.execute_tool(tool_name, args, channel)
+                if not result or result.strip() == "":
+                    result = "Tool executed successfully but returned no result."
                 self.conversations[conversation_key].append({"role": "assistant", "content": result})
                 await say(text=result, thread_ts=thread)
                 return
@@ -299,10 +301,17 @@ Return JSON with extracted parameters as dict, or empty dict if cannot parse."""
                     result = await server.run_tool(tool_name, args)
                     result_text = self._extract_text(result)
                     
+                    if not result_text or result_text.strip() == "":
+                        return "Tool executed but returned no data."
+                    
                     system_prompt = f"Format this tool result as a helpful Slack message:\n\nResult: {result_text}"
                     messages = [{"role": "system", "content": system_prompt}]
                     
                     interpretation = await self.chat_bot.get_response(messages)
+                    
+                    if not interpretation or interpretation.strip() == "":
+                        return result_text
+                    
                     return interpretation
             
             return f"Tool '{tool_name}' not found."
