@@ -10,6 +10,7 @@ from utils.slack_bot import SlackBot
 logging.basicConfig(level=logging.INFO)
 logging.getLogger('asyncio').setLevel(logging.CRITICAL)
 logging.getLogger('httpx').setLevel(logging.WARNING)
+logging.getLogger('httpcore').setLevel(logging.WARNING)
 logging.getLogger('mcp.client.streamable_http').setLevel(logging.WARNING)
 
 

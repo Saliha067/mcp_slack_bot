@@ -39,21 +39,31 @@ class SlackBot:
     async def start(self) -> None:
         print("\n🔄 Initializing bot and loading tools...")
         
+        connected_servers = 0
         for server in self.servers:
             try:
-                await server.start()
-                new_tools = await server.get_tools()
-                allowed_tools = [tool for tool in new_tools if tool.is_allowed]
-                self.tools.extend(allowed_tools)
-                
-                if allowed_tools:
-                    print(f"\n📦 Loaded {len(allowed_tools)} tools from '{server.name}':")
-                    for tool in allowed_tools:
-                        print(f"   • {tool.name}")
+                await asyncio.wait_for(server.start(), timeout=10.0)
+                if server.session:
+                    connected_servers += 1
+                    new_tools = await server.get_tools()
+                    allowed_tools = [tool for tool in new_tools if tool.is_allowed]
+                    self.tools.extend(allowed_tools)
+                    
+                    if allowed_tools:
+                        print(f"\n📦 Loaded {len(allowed_tools)} tools from '{server.name}':")
+                        for tool in allowed_tools:
+                            print(f"   • {tool.name}")
+            except asyncio.TimeoutError:
+                print(f"\n⚠️  Timeout connecting to '{server.name}'")
             except Exception as e:
-                print(f"\n⚠️  Warning: Could not connect to server '{server.name}': {e}")
+                print(f"\n⚠️  Could not connect to '{server.name}': {e}")
         
-        print(f"\n✨ Total tools available: {len(self.tools)}")
+        if connected_servers == 0:
+            print("\n⚠️  Warning: No MCP servers connected successfully!")
+        else:
+            print(f"\n✅ Connected to {connected_servers}/{len(self.servers)} server(s)")
+        
+        print(f"✨ Total tools available: {len(self.tools)}")
         
         try:
             auth = await self.client.auth_test()
@@ -63,6 +73,9 @@ class SlackBot:
             logging.error(f"Auth error: {e}")
             raise
         
+        await self.socket_handler.start_async()
+
+    async def handle_mention(self, event, say):        
         await self.socket_handler.start_async()
 
     async def handle_mention(self, event, say):

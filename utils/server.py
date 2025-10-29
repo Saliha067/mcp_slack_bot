@@ -32,27 +32,52 @@ class Server:
         if not url:
             raise ValueError(f"Server {self.name} missing 'url'")
         
+        # Pre-check: Test if server is reachable before creating MCP connection
+        import httpx
+        from urllib.parse import urlparse
+        parsed = urlparse(url)
+        base_url = f"{parsed.scheme}://{parsed.netloc}"
+        
+        try:
+            async with httpx.AsyncClient(timeout=3.0) as client:
+                await client.get(base_url)
+        except Exception as pre_check_error:
+            logging.error(f"Pre-check failed for {self.name}: {pre_check_error}")
+            self.session = None
+            return
+        
         try:
             logging.info(f"Connecting to {self.name} at {url}")
             
-            # Enter the streamablehttp_client context
             self._http_context = streamablehttp_client(url)
             read_stream, write_stream, get_session_id = await self._http_context.__aenter__()
             
             logging.info(f"Established HTTP connection to {self.name}")
             
-            # Enter the ClientSession context
             self._session_context = ClientSession(read_stream, write_stream)
             self.session = await self._session_context.__aenter__()
             
-            # Initialize the session
             logging.info(f"Initializing {self.name}...")
-            await self.session.initialize()
+            await asyncio.wait_for(self.session.initialize(), timeout=5.0)
             logging.info(f"✓ Initialized {self.name}")
             
+        except asyncio.TimeoutError:
+            logging.error(f"Timeout initializing {self.name}")
+            self.session = None
         except Exception as e:
-            logging.error(f"Failed to connect to {self.name}: {e}", exc_info=True)
-            raise
+            logging.error(f"Failed to connect to {self.name}: {str(e)}")
+            self.session = None
+        finally:
+            if not self.session:
+                try:
+                    if self._session_context:
+                        await self._session_context.__aexit__(None, None, None)
+                        self._session_context = None
+                    if self._http_context:
+                        await self._http_context.__aexit__(None, None, None)
+                        self._http_context = None
+                except Exception:
+                    pass
     
     async def _start_stdio(self) -> None:
         command = self.config.get("command")
@@ -70,8 +95,15 @@ class Server:
             await self.session.initialize()
             logging.info(f"✓ Initialized {self.name}")
         except Exception as e:
-            logging.error(f"Failed to start {self.name}: {e}", exc_info=True)
-            raise
+            logging.error(f"Failed to start {self.name}: {str(e)}")
+            self.session = None
+            if self._stdio_context:
+                try:
+                    await self._stdio_context.__aexit__(None, None, None)
+                    self._stdio_context = None
+                except Exception:
+                    pass
+            print(f"⚠️  Server {self.name} connection failed, continuing with other servers...")
     
     async def get_tools(self) -> List[Tool]:
         if not self.session:
