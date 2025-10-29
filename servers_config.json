@@ -1,0 +1,26 @@
+{
+  "servers": [
+    {
+      "name": "VictoriaMetrics",
+      "type": "http",
+      "url": "http://localhost:3000/mcp",
+      "allowedTools": [
+        "query",
+        "query_range",
+        "metrics",
+        "labels",
+        "label_values",
+        "series",
+        "documentation"
+      ]
+    },
+    {
+      "name": "Binance",
+      "type": "http",
+      "url": "http://0.0.0.0:8000/mcp",
+      "allowedTools": [
+        "get_price"
+      ]
+    }
+  ]
+}
