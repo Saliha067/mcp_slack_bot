@@ -199,9 +199,6 @@ class TopicGuardrail:
             else:
                 # Default topics for your bot
                 available_topics = [
-                    "company", "office", "policy", "faq",
-                    "math", "calculate", "add", "subtract", "multiply",
-                    "crypto", "bitcoin", "ethereum", "price",
                     "help", "tools", "what can you do"
                 ]
         
