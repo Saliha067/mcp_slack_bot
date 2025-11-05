@@ -2,6 +2,7 @@ import os
 import sys
 import asyncio
 import warnings
+import time
 
 # Suppress MCP SDK cleanup warnings
 warnings.filterwarnings("ignore", category=RuntimeWarning)
@@ -18,6 +19,7 @@ from tools.search import get_vectorstore
 from tools.math import tools as math_tools
 from servers.mcp_client import load_all_mcp_tools
 from formatters.response_formatter import SlackResponseFormatter
+from guardrails.input_guardrails import GuardrailChain
 
 load_dotenv()
 
@@ -89,6 +91,9 @@ Always try to use a tool first before saying you can't help."""
 
 agent = create_react_agent(llm, tools=all_tools)
 
+# Initialize guardrails
+guardrail_chain = GuardrailChain()
+
 
 @app.event("message")
 def handle_message_events(body, logger):
@@ -100,9 +105,27 @@ def handle_message_events(body, logger):
 def handle_hello(body, say, logger):
     event = body["event"]
     message = event["text"]
+    user_id = event["user"]
     thread_ts = event.get("thread_ts", event["ts"])
 
     try:
+        # Run guardrails check
+        guardrail_result = guardrail_chain.check_all(
+            message=message,
+            user_id=user_id,
+            timestamp=time.time()
+        )
+        
+        if not guardrail_result.passed:
+            # Guardrail failed - send error message
+            error_response = SlackResponseFormatter.format_error_message(
+                guardrail_result.reason,
+                context=f"Severity: {guardrail_result.severity}"
+            )
+            say(**error_response, thread_ts=thread_ts)
+            logger.warning(f"Guardrail blocked message from {user_id}: {guardrail_result.reason}")
+            return
+        
         # Check if user is asking for help or list of tools
         message_lower = message.lower()
         help_keywords = ["help", "list of tools", "available tools", "what can you do", "show tools", "list tools"]
