@@ -13,3 +13,5 @@ wheels/
 # common
 chroma_langchain_db
 .DS_Store
+.github/
+test*

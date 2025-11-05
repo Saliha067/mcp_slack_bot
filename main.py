@@ -17,6 +17,7 @@ from langchain_openai import ChatOpenAI
 from tools.search import get_vectorstore
 from tools.math import tools as math_tools
 from servers.mcp_client import load_all_mcp_tools
+from formatters.response_formatter import SlackResponseFormatter
 
 load_dotenv()
 
@@ -96,43 +97,78 @@ def handle_message_events(body, logger):
 
 
 @app.event("app_mention")
-def handle_hello(body, say):
+def handle_hello(body, say, logger):
     event = body["event"]
     message = event["text"]
     thread_ts = event.get("thread_ts", event["ts"])
 
-    # Check if user is asking for help
-    if "help" in message.lower():
-        # List all available tools
-        tool_list = []
-        for tool in all_tools:
-            tool_name = tool.name
-            # Get first meaningful line of description
-            lines = tool.description.strip().split('\n')
-            tool_desc = lines[0].strip() if lines else "No description"
-            # If first line is too short (like just a title), try to get more context
-            if len(tool_desc) < 20 and len(lines) > 1:
-                tool_desc = lines[1].strip()
-            # Truncate if still too long
-            if len(tool_desc) > 80:
-                tool_desc = tool_desc[:77] + "..."
-            tool_list.append(f"• *{tool_name}*: {tool_desc}")
+    try:
+        # Check if user is asking for help or list of tools
+        message_lower = message.lower()
+        help_keywords = ["help", "list of tools", "available tools", "what can you do", "show tools", "list tools"]
+        if any(keyword in message_lower for keyword in help_keywords):
+            # Use formatter for help message
+            formatted_help = SlackResponseFormatter.format_help_message(all_tools)
+            say(**formatted_help, thread_ts=thread_ts)
+            return
+
+        # Add system prompt to the conversation
+        response = agent.invoke({
+            "messages": [
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": message}
+            ]
+        })
+        response_text = response["messages"][-1].content
         
-        help_text = "Here are the tools available:\n" + "\n".join(tool_list)
-        help_text += "\n\nFor more details, feel free to ask!"
-        say(text=help_text, thread_ts=thread_ts)
-        return
-
-    # Add system prompt to the conversation
-    response = agent.invoke({
-        "messages": [
-            {"role": "system", "content": system_prompt},
-            {"role": "user", "content": message}
-        ]
-    })
-    text = response["messages"][-1].content
-
-    say(text=text, thread_ts=thread_ts)
+        # Extract tools used from the agent response
+        tools_used = []
+        for msg in response["messages"]:
+            # Check for tool calls in additional_kwargs (OpenAI format)
+            if hasattr(msg, "additional_kwargs") and "tool_calls" in msg.additional_kwargs:
+                for tool_call in msg.additional_kwargs["tool_calls"]:
+                    tool_name = tool_call.get("function", {}).get("name")
+                    if tool_name and tool_name not in tools_used:
+                        tools_used.append(tool_name)
+            # Check for tool_calls attribute directly (LangGraph format)
+            elif hasattr(msg, "tool_calls") and msg.tool_calls:
+                for tool_call in msg.tool_calls:
+                    tool_name = tool_call.get("name")
+                    if tool_name and tool_name not in tools_used:
+                        tools_used.append(tool_name)
+        
+        # Log tools used for debugging
+        if tools_used:
+            logger.info(f"Tools used in this response: {', '.join(tools_used)}")
+        else:
+            logger.info("No tools were used in this response")
+        
+        # Format response based on complexity
+        if SlackResponseFormatter.should_use_blocks(response_text):
+            formatted_response = SlackResponseFormatter.format_agent_response(
+                response_text,
+                tools_used=tools_used if tools_used else None
+            )
+            say(**formatted_response, thread_ts=thread_ts)
+        else:
+            # Simple text response - add tool info if tools were used
+            if tools_used:
+                formatted_response = SlackResponseFormatter.format_agent_response(
+                    response_text,
+                    tools_used=tools_used,
+                    include_metadata=True
+                )
+                say(**formatted_response, thread_ts=thread_ts)
+            else:
+                say(text=response_text, thread_ts=thread_ts)
+    
+    except Exception as e:
+        logger.error(f"Error processing message: {str(e)}")
+        error_response = SlackResponseFormatter.format_error_message(
+            "I encountered an error processing your request. Please try again.",
+            context=f"Error type: {type(e).__name__}"
+        )
+        say(**error_response, thread_ts=thread_ts)
 
 if __name__ == "__main__":
     try:
