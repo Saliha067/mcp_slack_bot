@@ -13,16 +13,6 @@ class SlackResponseFormatter:
     Minimal emoji usage, focused on readability and clarity.
     """
     
-    # Minimal emoji mapping for specific contexts only
-    CONTEXT_EMOJI = {
-        "search": "🔍",
-        "math": "🔢",
-        "crypto": "💰",
-        "error": "⚠️",
-        "success": "✓",
-        "info": "ℹ️"
-    }
-    
     @staticmethod
     def format_help_message(tools: List[Any]) -> Dict[str, Any]:
         """
@@ -198,7 +188,7 @@ class SlackResponseFormatter:
                 "type": "section",
                 "text": {
                     "type": "mrkdwn",
-                    "text": f"{SlackResponseFormatter.CONTEXT_EMOJI['error']} *Error*\n{error_msg}"
+                    "text": f"⚠️ *Error*\n{error_msg}"
                 }
             }
         ]
