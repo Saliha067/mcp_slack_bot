@@ -152,8 +152,15 @@ async def get_mcp_tools_from_server(server_config):
             tools = []
             for tool_info in server_tools:
                 tool_name = tool_info.get("name")
-                if tool_name in allowed_tools:
-                    tools.append(create_mcp_tool(server_name, session, tool_info))
+                # Handle wildcard "*" to allow all tools, or check specific tool names
+                if "*" in allowed_tools or tool_name in allowed_tools:
+                    try:
+                        tools.append(create_mcp_tool(server_name, session, tool_info))
+                    except Exception as tool_error:
+                        print(f"  ⚠ Failed to load tool '{tool_name}': {str(tool_error)[:80]}")
+            
+            if tools:
+                print(f"  → Loaded {len(tools)} allowed tools from {server_name}")
             
             return tools
         else:
@@ -168,7 +175,12 @@ async def get_mcp_tools_from_server(server_config):
 def create_mcp_tool(server_name, session, tool_info):
     """Create a LangChain tool from MCP tool info."""
     tool_name = tool_info.get("name")
-    tool_description = tool_info.get("description", f"Call {tool_name} tool")
+    # Ensure description is never empty or None, truncate if too long
+    raw_description = tool_info.get("description") or f"Call {tool_name} tool from {server_name}"
+    # Take only first sentence/line to avoid massive docstrings
+    tool_description = raw_description.split('\n')[0].split('.')[0]
+    if not tool_description.strip():
+        tool_description = f"Call {tool_name} tool from {server_name}"
     input_schema = tool_info.get("inputSchema", {})
     
     # Get server URL from the session
@@ -210,10 +222,11 @@ def create_mcp_tool(server_name, session, tool_info):
     if field_definitions:
         ArgsSchema = create_model(f"{tool_name}_args", **field_definitions)
     else:
-        ArgsSchema = None
+        # Create empty model for tools with no parameters
+        ArgsSchema = create_model(f"{tool_name}_args")
     
     def sync_wrapper(**kwargs):
-        """Synchronous wrapper - creates fresh connection for each call."""
+        """Synchronous wrapper for MCP tool calls."""
         import asyncio
         import threading
         
@@ -264,22 +277,16 @@ def create_mcp_tool(server_name, session, tool_info):
             # No running loop - safe to use asyncio.run()
             return asyncio.run(call_tool())
     
-    # Create StructuredTool with schema
-    if ArgsSchema:
-        return StructuredTool(
-            name=tool_name,
-            description=tool_description,
-            func=sync_wrapper,
-            args_schema=ArgsSchema
-        )
-    else:
-        # Fallback to simple tool if no schema
-        @tool
-        def simple_wrapper(**kwargs):
-            return sync_wrapper(**kwargs)
-        simple_wrapper.name = tool_name
-        simple_wrapper.description = tool_description
-        return simple_wrapper
+    # Set the wrapper's docstring to the tool description
+    sync_wrapper.__doc__ = tool_description
+    
+    # Create StructuredTool with schema (now always has ArgsSchema)
+    return StructuredTool(
+        name=tool_name,
+        description=tool_description,
+        func=sync_wrapper,
+        args_schema=ArgsSchema
+    )
 
 async def load_all_mcp_tools():
     """Load all MCP tools from configured servers."""

@@ -18,11 +18,12 @@ services:
     ports:
       - "3000:3000"
     environment:
-      - VM_INSTANCE_ENTRYPOINT=https://play.victoriametrics.com
+      - VM_INSTANCE_ENTRYPOINT=http://victoria-metrics:8428
       - VM_INSTANCE_TYPE=single
       - MCP_SERVER_MODE=http
       - MCP_LISTEN_ADDR=:3000
-    # Removed depends_on since we're using external VM
+    depends_on:
+      - victoria-metrics
 
 volumes:
   vm_data:

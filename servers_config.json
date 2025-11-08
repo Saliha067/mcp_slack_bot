@@ -11,7 +11,20 @@
         "labels",
         "label_values",
         "series",
-        "documentation"
+        "alerts",
+        "rules",
+        "tsdb_status",
+        "prettify_query",
+        "explain_query",
+        "active_queries",
+        "top_queries",
+        "relabel_debug",
+        "query_exemplars",
+        "format_query",
+        "query_stats",
+        "delete_series",
+        "export",
+        "flags"
       ]
     },
     {
