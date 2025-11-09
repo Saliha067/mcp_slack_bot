@@ -122,6 +122,46 @@ def load_servers_config():
         print(f"Error loading servers config: {e}")
         return []
 
+def enhance_mcp_tool_description(tool_name, base_description, input_schema):
+    """Enhance any MCP tool description with explicit format examples."""
+    properties = input_schema.get("properties", {})
+    if not properties:
+        return base_description
+    
+    format_examples = []
+    
+    # Check for timestamp fields (common patterns across all time-series tools)
+    for field_name, field_info in properties.items():
+        field_type = field_info.get("type", "")
+        field_desc = field_info.get("description", "").lower()
+        pattern = field_info.get("pattern", "")
+        
+        # Detect timestamp fields
+        if any(keyword in field_name.lower() for keyword in ["start", "end", "time"]) or \
+           any(keyword in field_desc for keyword in ["timestamp", "time"]) or \
+           "\\d{4}-\\d{2}-\\d{2}" in pattern:  # ISO date pattern
+            format_examples.append(f"- {field_name}: Unix timestamp (e.g., 1699123200) or ISO format (e.g., 2023-11-05T10:00:00Z)")
+        
+        # Detect duration fields
+        elif any(keyword in field_name.lower() for keyword in ["step", "timeout", "duration", "interval"]) or \
+             any(keyword in field_desc for keyword in ["duration", "interval"]) or \
+             "([0-9]+)([a-z]+)" in pattern:  # Duration pattern like 5m, 1h
+            format_examples.append(f"- {field_name}: Duration string (e.g., '5m', '1h', '30s')")
+        
+        # Detect query/expression fields
+        elif any(keyword in field_name.lower() for keyword in ["query", "expression", "match"]) or \
+             any(keyword in field_desc for keyword in ["promql", "metricsql", "query", "expression", "selector"]):
+            if "match" in field_name.lower():
+                format_examples.append(f"- {field_name}: PromQL selector (e.g., '{{cluster=\"prod-logs\"}}', 'opensearch_*')")
+            else:
+                format_examples.append(f"- {field_name}: PromQL expression (e.g., 'cpu_usage{{host=\"server1\"}}', 'rate(http_requests_total[5m])')")
+    
+    # Add format examples if any were found
+    if format_examples:
+        return base_description + "\n\nParameter formats:\n" + "\n".join(format_examples)
+    
+    return base_description
+
 async def get_mcp_tools_from_server(server_config):
     """Get tools from an MCP server. Returns empty list if server is down."""
     server_name = server_config.get("name")
@@ -177,11 +217,17 @@ def create_mcp_tool(server_name, session, tool_info):
     tool_name = tool_info.get("name")
     # Ensure description is never empty or None, truncate if too long
     raw_description = tool_info.get("description") or f"Call {tool_name} tool from {server_name}"
+    
+    # Get parameter schema
+    input_schema = tool_info.get("inputSchema", {})
+    
     # Take only first sentence/line to avoid massive docstrings
     tool_description = raw_description.split('\n')[0].split('.')[0]
     if not tool_description.strip():
         tool_description = f"Call {tool_name} tool from {server_name}"
-    input_schema = tool_info.get("inputSchema", {})
+    
+    # Enhance descriptions with explicit format examples for any MCP server
+    tool_description = enhance_mcp_tool_description(tool_name, tool_description, input_schema)
     
     # Get server URL from the session
     server_url = session.server_url
