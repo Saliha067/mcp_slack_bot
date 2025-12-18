@@ -57,7 +57,7 @@ You should now have two tokens:
 SLACK_APP_TOKEN=xapp-1-A0XXXXXXXXX-1234567890123-abcdef1234567890
 
 # Bot User OAuth Token
-SLACK_BOT_TOKEN=xoxb-1234567890123-1234567890123-abcdefghijklmnopqrstuvwx
+SLACK_BOT_TOKEN=
 Security Note: Never commit these tokens to version control. Store them as environment variables.
 Verify Setup
 In the next tab, we'll use these tokens to connect your Python bot to Slack.
