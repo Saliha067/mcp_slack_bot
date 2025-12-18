@@ -1,0 +1,18 @@
+global:
+  resolve_timeout: 5s
+
+route:
+  receiver: flask_webhook
+  group_wait: 1s
+  group_interval: 5s
+  repeat_interval: 30s
+
+receivers:
+  - name: flask_webhook
+    webhook_configs:
+      - url: 'http://localhost:5000/webhook'
+        send_resolved: true
+
+
+# tail -f /tmp/alertmanager.log
+# curl http://localhost:9090/-/healthy

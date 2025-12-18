@@ -1,0 +1,47 @@
+# Prometheus Configuration for AIOps Foundation Lab
+# This configuration sets up basic Prometheus monitoring
+
+global:
+  scrape_interval: 15s # How frequently to scrape targets
+  evaluation_interval: 15s # How frequently to evaluate rules
+  external_labels:
+    monitor: 'aiops-lab'
+    environment: 'learning'
+
+# Alertmanager configuration (optional, can be added later)
+# alerting:
+#   alertmanagers:
+#     - static_configs:
+#         - targets:
+#           # - alertmanager:9093
+
+# Rule files specify a list of globs
+# Rules and alerts are read from all matching files
+# rule_files:
+#   - "rules/*.yml"
+
+# Scrape configurations
+scrape_configs:
+  # Scrape Prometheus itself
+  - job_name: 'prometheus'
+    static_configs:
+      - targets: ['localhost:9090']
+        labels:
+          service: 'prometheus'
+          team: 'platform'
+
+  # Scrape Grafana
+  - job_name: 'grafana'
+    static_configs:
+      - targets: ['grafana:3000']
+        labels:
+          service: 'grafana'
+          team: 'platform'
+
+  # Example: Additional services can be added here
+  # - job_name: 'application'
+  #   static_configs:
+  #     - targets: ['app:8080']
+  #       labels:
+  #         service: 'web-app'
+  #         environment: 'production'
