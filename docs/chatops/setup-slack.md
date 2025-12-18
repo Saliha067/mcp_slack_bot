@@ -54,7 +54,7 @@ For the bot to respond to @mentions:
 Summary of Tokens
 You should now have two tokens:
 # App-level token (Socket Mode)
-SLACK_APP_TOKEN=xapp-1-A0XXXXXXXXX-1234567890123-abcdef1234567890
+SLACK_APP_TOKEN=
 
 # Bot User OAuth Token
 SLACK_BOT_TOKEN=
