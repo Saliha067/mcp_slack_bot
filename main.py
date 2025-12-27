@@ -4,19 +4,25 @@ import warnings
 from dotenv import load_dotenv
 from slack_bolt import App
 from slack_bolt.adapter.socket_mode import SocketModeHandler
-from langgraph.prebuilt import create_react_agent
+from langchain.agents import AgentExecutor, create_tool_calling_agent
+from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
+from langchain_core.messages import SystemMessage, HumanMessage, AIMessage
 from langchain.tools.retriever import create_retriever_tool
 from langchain_ollama import ChatOllama
 from langchain_openai import ChatOpenAI
 from tools.search import get_vectorstore
-from tools.math import tools as math_tools
 from servers.mcp_client import load_all_mcp_tools
+from utils import TimeRangeParser
+from prompts.builder import PromptBuilder
 
 # Suppress warnings
 warnings.filterwarnings("ignore", category=RuntimeWarning)
 warnings.filterwarnings("ignore", category=DeprecationWarning)
 
 load_dotenv()
+
+# Initialize utilities
+time_parser = TimeRangeParser(timezone="UTC")  # Adjust timezone as needed
 
 # Determine environment and select appropriate tokens
 environment = os.environ.get("ENVIRONMENT", "prod").lower()
@@ -51,7 +57,7 @@ vectorstore = get_vectorstore()
 retriever_tool = create_retriever_tool(
     vectorstore.as_retriever(),
     name="search",
-    description="Retrieve information about the company. You will call this tool when you need to answer a question that you do not know the answer to.",
+    description="Search runbooks and infrastructure documentation. Use this to find troubleshooting guides, operational procedures, and best practices.",
 )
 
 # Load MCP tools from servers (handles unavailable servers gracefully)
@@ -68,30 +74,41 @@ try:
 finally:
     sys.stderr = old_stderr
 
-print(f"Loaded {len(mcp_tools)} MCP tools")
-
+print(f"Total: {len(mcp_tools)} MCP tools loaded\n")
 
 # Combine all tools
-all_tools = [retriever_tool] + math_tools + mcp_tools
+all_tools = [retriever_tool] + mcp_tools
 
-# System prompt to guide tool usage
-system_prompt = """You are a helpful assistant with access to these tools:
+# Build dynamic system prompt
+prompt_builder = PromptBuilder()
+system_prompt_text = prompt_builder.build_infrastructure_prompt(all_tools)
 
-1. **search** - Search company information, FAQs, policies, office hours, etc.
-2. **add_numbers**, **subtract_numbers**, **multiply_numbers** - Perform basic math
-3. **MCP tools** - Get cryptocurrency prices, monitoring data, etc.
+# Optional: Save generated prompt for debugging
+if os.environ.get("DEBUG_PROMPT"):
+    with open("generated_prompt.txt", "w") as f:
+        f.write(system_prompt_text)
+    print("Generated prompt saved to generated_prompt.txt\n")
 
-IMPORTANT: Always use the appropriate tool when available. For example:
-- Company questions → use "search" tool
-- Math problems → use math tools  
-- Crypto prices → use MCP tools
-- Office hours, policies, company info → use "search" tool
+# Create proper LangChain agent with tool calling
+# Use SystemMessage to avoid template variable conflicts
+prompt = ChatPromptTemplate.from_messages([
+    SystemMessage(content=system_prompt_text),
+    MessagesPlaceholder("chat_history", optional=True),
+    ("human", "{input}"),
+    MessagesPlaceholder("agent_scratchpad"),
+])
 
-If the user asks something completely unrelated (like weather, sports, general knowledge), politely say you can only help with the topics covered by your tools.
+agent = create_tool_calling_agent(llm, all_tools, prompt)
+agent_executor = AgentExecutor(
+    agent=agent,
+    tools=all_tools,
+    verbose=True,
+    handle_parsing_errors=True,
+    max_iterations=10
+)
 
-Always try to use a tool first before saying you can't help."""
-
-agent = create_react_agent(llm, tools=all_tools)
+# Store conversation history per thread
+conversation_history = {}
 
 
 @app.event("message")
@@ -108,30 +125,36 @@ def handle_app_mention(body, say, logger):
     thread_ts = event.get("thread_ts", event["ts"])
 
     try:
-        # Check if user is asking for help
-        message_lower = message.lower()
-        if any(keyword in message_lower for keyword in ["help", "list tools", "what can you do"]):
-            help_text = "*Available Tools:*\n\n"
-            for tool in all_tools:
-                help_text += f"• `{tool.name}` - {tool.description.split('.')[0]}\n"
-            help_text += "\n_Mention me with your question to use these tools_"
-            say(text=help_text, thread_ts=thread_ts)
-            return
+        # Parse time range if mentioned
+        start_time, end_time = time_parser.parse(message)
+        if start_time and end_time:
+            logger.info(f"Parsed time range: {start_time} to {end_time}")
 
-        # Add system prompt to the conversation
-        response = agent.invoke({
-            "messages": [
-                {"role": "system", "content": system_prompt},
-                {"role": "user", "content": message}
-            ]
+        # Get or create conversation history for this thread
+        if thread_ts not in conversation_history:
+            conversation_history[thread_ts] = []
+        
+        # Execute query with conversation memory
+        response = agent_executor.invoke({
+            "input": message,
+            "chat_history": conversation_history[thread_ts]
         })
         
-        response_text = response["messages"][-1].content
+        response_text = response["output"]
+        
+        # Update conversation history
+        conversation_history[thread_ts].append(HumanMessage(content=message))
+        conversation_history[thread_ts].append(AIMessage(content=response_text))
+        
+        # Keep history limited to last 20 messages (10 exchanges)
+        if len(conversation_history[thread_ts]) > 20:
+            conversation_history[thread_ts] = conversation_history[thread_ts][-20:]
+        
         say(text=response_text, thread_ts=thread_ts)
     
     except Exception as e:
-        logger.error(f"Error processing message: {str(e)}")
-        say(text="I encountered an error processing your request. Please try again.", thread_ts=thread_ts)
+        logger.error(f"Error processing message: {str(e)}", exc_info=True)
+        say(text=f"Sorry, I encountered an error: {str(e)}\n\nContact @platform-oncall if this persists.", thread_ts=thread_ts)
 
 
 if __name__ == "__main__":

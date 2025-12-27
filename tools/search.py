@@ -19,10 +19,12 @@ def get_embeddings():
     if llm_model.startswith("gpt"):
         return OpenAIEmbeddings(model="text-embedding-3-large")
     else:
-        # Use Ollama embeddings for other models
+        # Use Ollama embeddings with dedicated embedding model
         ollama_base_url = os.environ.get("OLLAMA_BASE_URL", "http://localhost:11434")
+        # Use nomic-embed-text or mxbai-embed-large for embeddings, not chat models
+        embedding_model = os.environ.get("OLLAMA_EMBEDDING_MODEL", "nomic-embed-text")
         return OllamaEmbeddings(
-            model=llm_model,
+            model=embedding_model,
             base_url=ollama_base_url
         )
 
@@ -49,14 +51,29 @@ def initialize_rag():
     )
     documents = []
     docs_dir = "./docs"
+    
     if os.path.exists(docs_dir):
-        for filename in os.listdir(docs_dir):
-            if filename.endswith(".txt"):
-                file_path = os.path.join(docs_dir, filename)
-                loader = TextLoader(file_path)
-                loaded_docs = loader.load()
-                texts = text_splitter.split_documents(loaded_docs)
-                documents.extend(texts)
+        # Walk through all subdirectories to find .md and .txt files
+        for root, dirs, files in os.walk(docs_dir):
+            for filename in files:
+                if filename.endswith((".txt", ".md")):
+                    file_path = os.path.join(root, filename)
+                    try:
+                        loader = TextLoader(file_path, encoding='utf-8')
+                        loaded_docs = loader.load()
+                        texts = text_splitter.split_documents(loaded_docs)
+                        documents.extend(texts)
+                        print(f"  ✓ Loaded: {file_path}")
+                    except Exception as e:
+                        print(f"  ✗ Failed to load {file_path}: {e}")
+    
+    if not documents:
+        raise ValueError(
+            f"No documents found in {docs_dir}. "
+            "Vector store requires at least one document to initialize."
+        )
+    
+    print(f"\n  Total documents to index: {len(documents)}")
 
     uuids = [str(uuid4()) for _ in range(len(documents))]
     vectorstore = Chroma.from_documents(

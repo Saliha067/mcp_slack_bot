@@ -6,11 +6,22 @@
       "url": "http://localhost:3000/mcp",
       "allowedTools": [
         "query",
-        "query_range",
+        "query_range", 
         "metrics",
         "labels",
         "label_values",
         "series",
+        "alerts", 
+        "rules",
+        "tsdb_status",
+        "prettify_query",
+        "explain_query",
+        "active_queries",
+        "top_queries",
+        "export",
+        "flags",
+        "metric_relabel_debug",
+        "metric_statistics",
         "documentation"
       ]
     },
